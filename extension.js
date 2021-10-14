@@ -63,7 +63,9 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
 
   // Run a command in the database
   function execute(worker, commands, on_result) {
-    tic();
+    console.log("Executing ");
+    console.log(commands);
+    //tic();
     worker.onmessage = (event) => on_result(event.data);
     /*function (event) {
       var results = event.data.results;
@@ -107,15 +109,58 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       });
     });
 
+  // Create an HTML table
+  // From https://github.com/sql-js/sql.js/blob/master/examples/GUI/gui.js#L51
+  let tableCreate = (function () {
+    function valconcat(vals, tagName) {
+      if (vals.length === 0) return "";
+      var open = "<" + tagName + ">",
+        close = "</" + tagName + ">";
+      return open + vals.join(close + open) + close;
+    }
+    return function (columns, values) {
+      var tbl = document.createElement("table");
+      var html = "<thead>" + valconcat(columns, "th") + "</thead>";
+      var rows = values.map(function (v) {
+        return valconcat(v, "td");
+      });
+      html += "<tbody>" + valconcat(rows, "tr") + "</tbody>";
+      tbl.innerHTML = html;
+      return tbl;
+    };
+  })();
+
   /** Inject a sql editor in the document. Creates a `<textarea>` element to contain it.
    *
    * @param {Object} options - options for `GGBApplet`.
    * @returns {Promise} - resolves to an object `{worker, el}` - `worker` is the student db worker object, `el` is the container element.
    */
-  var showEditor = function () {
+  var showEditor = function (worker) {
     return new Promise(function (resolve, reject) {
-      var element;
-      element = document.createElement("textarea");
+      let element = document.createElement("div");
+      let textarea = document.createElement("textarea");
+      let button = document.createElement("button");
+      button.innerHTML = "execute";
+      let result = document.createElement("div");
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        execute(worker, textarea.value, (data) => {
+          let results = data.results;
+          if (!results) {
+            result.innerHTML = data.error;
+          } else {
+            result.innerHTML = "";
+            for (var i = 0; i < results.length; i++) {
+              result.appendChild(
+                tableCreate(results[i].columns, results[i].values)
+              );
+            }
+          }
+        });
+      });
+      element.appendChild(textarea);
+      element.appendChild(button);
+      element.appendChild(result);
       container.appendChild(element);
       resolve(element);
     });
@@ -146,7 +191,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
         return initializeStudentDbWorker(setup_query);
       })
       .then(function (worker) {
-        return showEditor().then((el) => (worker, el));
+        return showEditor(worker).then((el) => (worker, el));
       });
     //.then(constructionFinished);
     //.then(eval_replacements(replacements)); ??
@@ -213,8 +258,8 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       null, // ??
       {
         evaluate: function (args, scope) {
-          let setup_query = args[0];
-          let correct_query = args[1];
+          let setup_query = args[0].value;
+          let correct_query = args[1].value;
           return new TSQLEditor(createSQLEditor(setup_query, correct_query));
         },
       },
