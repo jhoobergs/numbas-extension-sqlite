@@ -130,3 +130,6 @@ createGeogebraApplet = extension.createGeogebraApplet = function(options,replace
     }
 `` `
 ```
+
+
+- Changed numbas so I could add js file for the worker

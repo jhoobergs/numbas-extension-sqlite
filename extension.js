@@ -62,32 +62,13 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
   }
 
   // Run a command in the database
-  function execute(worker, commands, on_result) {
+  function execute(worker, commands) {
     console.log("Executing ");
     console.log(commands);
-    //tic();
-    worker.onmessage = (event) => on_result(event.data);
-    /*function (event) {
-      var results = event.data.results;
-      toc("Executing SQL");
-      if (!results) {
-        error({ message: event.data.error });
-        return;
-      }
-      
-
-      tic();
-      outputElm.innerHTML = "";
-      for (var i = 0; i < results.length; i++) {
-        outputElm.appendChild(
-          tableCreate(results[i].columns, results[i].values)
-        );
-      }
-      toc("Displaying results");
-    
-  };*/
-    worker.postMessage({ action: "exec", sql: commands });
-    //outputElm.textContent = "Fetching results...";
+    return new Promise((resolve, reject) => {
+      worker.onmessage = (event) => resolve(event.data);
+      worker.postMessage({ action: "exec", sql: commands });
+    });
   }
 
   // TODO
@@ -95,19 +76,18 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
    *
    * @returns {Promise} - resolves to the `GGBApplet` constructor.
    */
-  let initializeStudentDbWorker = (setup_query) =>
-    new Promise(function (resolve, reject) {
-      let studentDbWorker = worker();
-      execute(studentDbWorker, setup_query, (result) => {
-        console.log("Initialized with response");
-        console.log(result);
-        if (!result.error) {
-          resolve(studentDbWorker);
-        } else {
-          reject("Failed initializing the student database.");
-        }
-      });
+  let initializeStudentDbWorker = (setup_query) => {
+    let studentDbWorker = worker();
+    return execute(studentDbWorker, setup_query).then((result) => {
+      console.log("Initialized with response");
+      console.log(result);
+      if (!result.error) {
+        return studentDbWorker;
+      } else {
+        throw "Failed initializing the student database.";
+      }
     });
+  };
 
   // Create an HTML table
   // From https://github.com/sql-js/sql.js/blob/master/examples/GUI/gui.js#L51
@@ -144,7 +124,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       let result = document.createElement("div");
       button.addEventListener("click", (event) => {
         event.preventDefault();
-        execute(worker, textarea.value, (data) => {
+        execute(worker, textarea.value).then((data) => {
           let results = data.results;
           if (!results) {
             result.innerHTML = data.error;
@@ -261,6 +241,64 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
           let setup_query = args[0].value;
           let correct_query = args[1].value;
           return new TSQLEditor(createSQLEditor(setup_query, correct_query));
+        },
+      },
+      { unwrapValues: true }
+    )
+  );
+  extension.scope.addFunction(
+    new funcObj(
+      "check_resultset",
+      [TSQLEditor],
+      TBool,
+      null, // ??
+      {
+        evaluate: function (args, scope) {
+          let sql_editor = args[0].value;
+
+          let correct_worker = worker();
+          let student_result_worker = worker();
+
+          let correct_promise = execute(
+            correct_worker,
+            sql_editor.setup_query
+          ).then(() =>
+            execute(correct_worker, sql_editor.correct_query).then((res) => {
+              console.log("Correct");
+              console.log(res);
+              if (res.error) {
+                throw "Correct answer seems wrong";
+              } else {
+                return res.results;
+              }
+            })
+          );
+
+          let student_promise = execute(
+            student_result_worker,
+            sql_editor.setup_query
+          ).then(() =>
+            execute(
+              student_result_worker,
+              sql_editor.element.getElementsByTagName("textarea")[0].value
+            ).then((res) => {
+              console.log("student");
+              console.log(res);
+              return res;
+            })
+          );
+
+          return Promise.all([correct_promise, student_promise]).then(
+            ([correct_set, student_set]) => {
+              console.log(correct_set);
+              console.log(student_set);
+              if (student_set.error) {
+                return new TBool(false);
+              } else {
+                return new TBool(correct_set == student_set.results);
+              }
+            }
+          );
         },
       },
       { unwrapValues: true }
