@@ -44,7 +44,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
   let worker = () => {
     return new Worker(
       //"https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.6.1/worker.sql-wasm.js"
-      "extensions/sqlite/worker.sql-wasm.js"
+      "extensions/sqlite/standalone_scripts/worker.sql-wasm.js"
     );
   };
 
@@ -93,7 +93,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
    *
    * @returns {Promise} - resolves to the `GGBApplet` constructor.
    */
-  let initializeStudentDBWorker = (setup_query) =>
+  let initializeStudentDbWorker = (setup_query) =>
     new Promise(function (resolve, reject) {
       let studentDbWorker = worker();
       execute(studentDbWorker, setup_query, (result) => {
@@ -146,7 +146,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
         return initializeStudentDbWorker(setup_query);
       })
       .then(function (worker) {
-        return show_editor().then((el) => (worker, el));
+        return showEditor().then((el) => (worker, el));
       });
     //.then(constructionFinished);
     //.then(eval_replacements(replacements)); ??
