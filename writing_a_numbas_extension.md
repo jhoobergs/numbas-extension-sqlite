@@ -21,7 +21,7 @@ When a student thinks that they have found the solution, they can submit and Num
 I had never written a Numbas extension before, so I started by visiting https://numbas-editor.readthedocs.io/en/latest/extensions/index.html where I found the basic syntax to start developing my extension:
 
 ```
-Numbas.addExtension("sqlite", ["jme"], function (extension) {
+Numbas.addExtension("sqlite", ["base"], function (extension) {
 }
 ```
 
@@ -64,5 +64,69 @@ or
 ```
 mark: correctif(check_state(editor))
 
-interpreted_answer: current_query(editor)
+interpreted_answer: complete_query(editor)
+```
+
+## How to create this?
+
+The code of all builtin Numbas extension is available on [Github](https://github.com/numbas) so I started looking at the code of the [Geogebra extension](https://github.com/numbas/numbas-extension-geogebra/).
+
+### Some things that I found out
+
+#### JME
+
+- If you want to use jme stuff, you need to add `"jme"` to the top list
+- You can use `Numbas.jme` to use all kinds of usefull functions
+- `Numbas.jme.Types` can be used to specify jme types
+  - `Numbas.jme.Types.TString`
+  - `Numbas.jme.Types.TNum`
+  - `Numbas.jme.Types.THTML`
+  - ...
+- `Numbas.jme.signature` can be used to define specific signature for functions (like [this example](https://github.com/numbas/numbas-extension-geogebra/blob/10077c0b6aeb97037ca3c1211fff6764d8c8099b/geogebra.js#L727))
+
+```
+var sig_ggbapplet = sig.sequence(
+        sig.or(
+            sig.label('material_id', sig.type('string')),
+            sig.sequence(
+                sig.label('width',sig.type('number')),
+                sig.label('height',sig.type('number'))
+            )
+        ),
+        sig.optional(
+            sig.or(
+                sig.type('list'),
+                sig.type('dict')
+            )
+        ),
+        sig.optional(
+            sig.type('list')
+        )
+    );
+var match = sig_ggbapplet(args)
+```
+
+- I currently don't plan on creating function with different possible signatures, but if I want to, I now know how to do it.
+
+## Value function
+
+The value function can only be evaluated when the geogebra applet is loaded. This will probaly be the same for my `sql.js` database, so the code at https://github.com/numbas/numbas-extension-geogebra/blob/10077c0b6aeb97037ca3c1211fff6764d8c8099b/geogebra.js#L937 might become useful.
+
+## Scope
+
+You can get the scope from `extension.scope`. This scope contains stuff like
+
+- `scope.question`
+
+## Old js style
+
+Almost all extension use a quite old JS style. I would like to write in ES6 syntax, but for my first version, I will use the old style as used in the geogebra extension.
+
+It was usefull to see that they several functions like
+
+```
+createGeogebraApplet = extension.createGeogebraApplet = function(options,replacements,parts,question) {
+        return new GeogebraApplet(options,replacements,parts,question);
+    }
+`` `
 ```
