@@ -26,13 +26,16 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
     let a = this;
     this.worker = null; // ??
     this.el = null; // ??
+    this.correct_result = null;
+    this.current_result = null;
     this.value = data;
     this.promise = data.promise; // ??
     this.container = data.element;
 
-    this.promise.then(function (el, worker) {
+    this.promise.then(function ([el, worker, correct_result]) {
       a.worker = worker;
       a.element = el;
+      a.correct_result = correct_result;
     });
   };
   jme.registerType(TSQLEditor, "sqleditor", {
@@ -48,23 +51,8 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
     );
   };
 
-  // Performance measurement functions
-  let tictime;
-  if (!window.performance || !performance.now) {
-    window.performance = { now: Date.now };
-  }
-  function tic() {
-    tictime = performance.now();
-  }
-  function toc(msg) {
-    var dt = performance.now() - tictime;
-    console.log((msg || "toc") + ": " + dt + "ms");
-  }
-
   // Run a command in the database
   function execute(worker, commands) {
-    console.log("Executing ");
-    console.log(commands);
     return new Promise((resolve, reject) => {
       worker.onmessage = (event) => resolve(event.data);
       worker.postMessage({ action: "exec", sql: commands });
@@ -76,15 +64,13 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
    *
    * @returns {Promise} - resolves to the `GGBApplet` constructor.
    */
-  let initializeStudentDbWorker = (setup_query) => {
-    let studentDbWorker = worker();
-    return execute(studentDbWorker, setup_query).then((result) => {
-      console.log("Initialized with response");
-      console.log(result);
+  let initializeDbWorker = (setup_query) => {
+    let dbWorker = worker();
+    return execute(dbWorker, setup_query).then((result) => {
       if (!result.error) {
-        return studentDbWorker;
+        return dbWorker;
       } else {
-        throw "Failed initializing the student database.";
+        throw "Failed initializing a database.";
       }
     });
   };
@@ -115,7 +101,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
    * @param {Object} options - options for `GGBApplet`.
    * @returns {Promise} - resolves to an object `{worker, el}` - `worker` is the student db worker object, `el` is the container element.
    */
-  var showEditor = function (worker) {
+  var showEditor = function (worker, state) {
     return new Promise(function (resolve, reject) {
       let element = document.createElement("div");
       let textarea = document.createElement("textarea");
@@ -126,6 +112,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
         event.preventDefault();
         execute(worker, textarea.value).then((data) => {
           let results = data.results;
+          state.current_result = data;
           if (!results) {
             result.innerHTML = data.error;
           } else {
@@ -168,10 +155,20 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
 
     promise = promise
       .then(function () {
-        return initializeStudentDbWorker(setup_query);
+        return Promise.all([
+          initializeDbWorker(setup_query).then((worker) =>
+            execute(worker, correct_query)
+          ),
+          initializeDbWorker(setup_query),
+        ]);
       })
-      .then(function (worker) {
-        return showEditor(worker).then((el) => (worker, el));
+      .then(function ([correct_result, student_worker]) {
+        sql_editor.correct_result = correct_result;
+        return showEditor(student_worker, sql_editor).then((el) => [
+          el,
+          student_worker,
+          correct_result,
+        ]);
       });
     //.then(constructionFinished);
     //.then(eval_replacements(replacements)); ??
@@ -201,7 +198,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
     */
 
     promise
-      .then(function (el, worker) {
+      .then(function ([el, worker, correct]) {
         element.innerHTML = "";
         element.className = "numbas-sqlite-applet numbas-sqlite-loaded";
         element.appendChild(el);
@@ -256,44 +253,10 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
         evaluate: function (args, scope) {
           let sql_editor = args[0].value;
 
-          let correct_worker = worker();
-          let student_result_worker = worker();
-
-          let correct_promise = execute(
-            correct_worker,
-            sql_editor.setup_query
-          ).then(() =>
-            execute(correct_worker, sql_editor.correct_query).then((res) => {
-              if (res.error) {
-                throw "Correct answer seems wrong";
-              } else {
-                return res.results;
-              }
-            })
+          return new TBool(
+            JSON.stringify(sql_editor.correct_result) ==
+              JSON.stringify(sql_editor.current_result)
           );
-
-          let student_promise = execute(
-            student_result_worker,
-            sql_editor.setup_query
-          ).then(() =>
-            execute(
-              student_result_worker,
-              sql_editor.element.getElementsByTagName("textarea")[0].value
-            ).then((res) => {
-              return res;
-            })
-          );
-
-          let a = Promise.all([correct_promise, student_promise]).then(
-            ([correct_set, student_set]) => {
-              if (student_set.error) {
-                return false;
-              } else {
-                return correct_set == student_set.results;
-              }
-            }
-          );
-          return a.then((r) => new TBool(r));
         },
       },
       { unwrapValues: true }
