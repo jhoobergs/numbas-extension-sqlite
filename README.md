@@ -1,3 +1,3 @@
 # sqlite
 
-The author of this extension should write some documentation about how it works.
+This extension is still being developed. Please come back later for more info.
