@@ -264,8 +264,6 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
             sql_editor.setup_query
           ).then(() =>
             execute(correct_worker, sql_editor.correct_query).then((res) => {
-              console.log("Correct");
-              console.log(res);
               if (res.error) {
                 throw "Correct answer seems wrong";
               } else {
@@ -282,23 +280,20 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
               student_result_worker,
               sql_editor.element.getElementsByTagName("textarea")[0].value
             ).then((res) => {
-              console.log("student");
-              console.log(res);
               return res;
             })
           );
 
-          return Promise.all([correct_promise, student_promise]).then(
+          let a = Promise.all([correct_promise, student_promise]).then(
             ([correct_set, student_set]) => {
-              console.log(correct_set);
-              console.log(student_set);
               if (student_set.error) {
-                return new TBool(false);
+                return false;
               } else {
-                return new TBool(correct_set == student_set.results);
+                return correct_set == student_set.results;
               }
             }
           );
+          return a.then((r) => new TBool(r));
         },
       },
       { unwrapValues: true }
