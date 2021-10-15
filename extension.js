@@ -62,21 +62,13 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
   }
 
   // Run a command in the database
-  function execute_promise(worker, commands) {
+  function execute(worker, commands) {
     console.log("Executing ");
     console.log(commands);
     return new Promise((resolve, reject) => {
       worker.onmessage = (event) => resolve(event.data);
       worker.postMessage({ action: "exec", sql: commands });
     });
-  }
-
-  // Run a command in the database
-  function execute(worker, commands, on_message) {
-    console.log("Executing ");
-    console.log(commands);
-    worker.onmessage = (event) => on_message(event.data);
-    worker.postMessage({ action: "exec", sql: commands });
   }
 
   // TODO
@@ -86,7 +78,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
    */
   let initializeStudentDbWorker = (setup_query) => {
     let studentDbWorker = worker();
-    return execute_promise(studentDbWorker, setup_query).then((result) => {
+    return execute(studentDbWorker, setup_query).then((result) => {
       console.log("Initialized with response");
       console.log(result);
       if (!result.error) {
@@ -132,7 +124,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       let result = document.createElement("div");
       button.addEventListener("click", (event) => {
         event.preventDefault();
-        execute_promise(worker, textarea.value).then((data) => {
+        execute(worker, textarea.value).then((data) => {
           let results = data.results;
           if (!results) {
             result.innerHTML = data.error;
@@ -263,60 +255,10 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       {
         evaluate: function (args, scope) {
           let sql_editor = args[0].value;
-          let current_query =
-            sql_editor.element.getElementsByTagName("textarea")[0].value;
+
           let correct_worker = worker();
           let student_result_worker = worker();
 
-          function run(generatorFunction) {
-            var generatorItr = generatorFunction(resume);
-            function resume(callbackValue) {
-              generatorItr.next(callbackValue);
-            }
-            generatorItr.next();
-          }
-
-          let res = run(function* generator(resume) {
-            let correct_setup_res = yield execute(
-              correct_worker,
-              sql_editor.setup_query,
-              resume
-            );
-            let correct_query_res = yield execute(
-              correct_worker,
-              sql_editor.correct_query,
-              resume
-            );
-            let student_setup_res = yield execute(
-              student_result_worker,
-              sql_editor.setup_query,
-              resume
-            );
-            let student_query_res = yield execute(
-              student_result_worker,
-              current_query,
-              resume
-            );
-            console.log(correct_query_res);
-            console.log(correct_setup_res);
-            console.log(student_setup_res);
-            console.log(student_query_res);
-            let result;
-            if (student_query_res.error) {
-              result = false;
-            } else {
-              console.log("comparing");
-              result =
-                JSON.stringify(correct_query_res) ===
-                JSON.stringify(student_query_res);
-              // see https://stackoverflow.com/a/1144249
-            }
-            console.log("result", result);
-          });
-          console.log("res", res);
-          return new TBool(res);
-
-          /*
           let correct_promise = execute(
             correct_worker,
             sql_editor.setup_query
@@ -334,7 +276,10 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
             student_result_worker,
             sql_editor.setup_query
           ).then(() =>
-            execute(student_result_worker, current_query).then((res) => {
+            execute(
+              student_result_worker,
+              sql_editor.element.getElementsByTagName("textarea")[0].value
+            ).then((res) => {
               return res;
             })
           );
@@ -348,7 +293,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
               }
             }
           );
-          return a.then((r) => new TBool(r));*/
+          return a.then((r) => new TBool(r));
         },
       },
       { unwrapValues: true }
