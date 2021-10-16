@@ -153,10 +153,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
     return new Promise(function (resolve, reject) {
       let element = document.createElement("div");
       let textarea = document.createElement("textarea");
-      textarea.setAttribute(
-        "style",
-        "display:block;min-width:600;"
-      );
+      textarea.setAttribute("style", "display:block;min-width:600;");
       let button = document.createElement("button");
       button.innerHTML = "execute";
       button.setAttribute("class", "btn btn-primary");
@@ -166,7 +163,11 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       resetButton.innerHTML = "Reset DB";
       resetButton.setAttribute("class", "btn btn-primary");
 
-      function execEditorContents() {
+      let showTablesButton = document.createElement("button");
+      showTablesButton.innerHTML = "Show Tables";
+      showTablesButton.setAttribute("class", "btn btn-primary");
+
+      function execEditorContents(command) {
         execute(state.student_worker, editor.getValue()).then((data) => {
           let results = data.results;
           state.current_result = data;
@@ -183,6 +184,45 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
         });
       }
 
+      async function showTablesInfo(command) {
+        let data = await execute(
+          state.student_worker,
+          "SELECT name FROM `sqlite_master` WHERE type='table';"
+        );
+        let results_sets = [];
+        for (let name of data.results[0].values) {
+          let command = "";
+          command += `PRAGMA table_info('${name}');`;
+          command += `PRAGMA foreign_key_list('${name}');`;
+          let result = await execute(state.student_worker, command);
+          results_sets.push([name, result]);
+        }
+        result.innerHTML = "";
+        for (let [name, data] of results_sets) {
+          let h = document.createElement("h4");
+          h.innerHTML = name;
+          result.appendChild(h);
+          let results = data.results;
+          if (!results) {
+            let span = document.createElement("span");
+            span.innerHTML = data.error;
+            result.appendChild(span);
+          } else {
+            result.appendChild(
+              tableCreate(results[0].columns, results[0].values)
+            );
+            if (results.length > 1) {
+              let h = document.createElement("h4");
+              h.innerHTML = `Foreign keys of ${name}`;
+              result.appendChild(h);
+              result.appendChild(
+                tableCreate(results[1].columns, results[1].values)
+              );
+            }
+          }
+        }
+      }
+
       button.addEventListener("click", (event) => {
         event.preventDefault();
         execEditorContents();
@@ -196,9 +236,15 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
         });
       });
 
+      showTablesButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        showTablesInfo();
+      });
+
       element.appendChild(textarea);
       element.appendChild(button);
       element.appendChild(resetButton);
+      element.appendChild(showTablesButton);
       element.appendChild(result);
       container.appendChild(element);
 
