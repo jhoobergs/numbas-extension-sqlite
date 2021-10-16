@@ -155,7 +155,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       let textarea = document.createElement("textarea");
       textarea.setAttribute("style", "display:block;min-width:600;");
       let button = document.createElement("button");
-      button.innerHTML = "execute";
+      button.innerHTML = "Execute";
       button.setAttribute("class", "btn btn-primary");
       let result = document.createElement("div");
       result.setAttribute("style", "margin-top:10px;");
@@ -167,8 +167,14 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       showTablesButton.innerHTML = "Show Tables";
       showTablesButton.setAttribute("class", "btn btn-primary");
 
-      function execEditorContents(command) {
-        execute(state.student_worker, editor.getValue()).then((data) => {
+      function execEditorContents() {
+        let command = editor.getValue();
+        if (!command) {
+          // If command is empty text
+          result.innerHTML = "";
+          return;
+        }
+        execute(state.student_worker, command).then((data) => {
           let results = data.results;
           state.current_result = data;
           if (!results) {
