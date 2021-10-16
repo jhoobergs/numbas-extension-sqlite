@@ -59,13 +59,57 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
     });
   }
 
+  let injectedDeployScript = false;
+
+  /** Load the CodeMirror code from a cdn.
+   *
+   * @returns {Promise} - resolves to the `CodeMirror` constructor.
+   */
+  var loadCodeMirror = new Promise(function (resolve, reject) {
+    if (window.CodeMirror) {
+      resolve(CodeMirror);
+    } else {
+      if (!injectedDeployScript) {
+        var s = document.createElement("script");
+        s.setAttribute("type", "text/javascript");
+        s.setAttribute(
+          "src",
+          "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.58.1/codemirror.js"
+        );
+        document.head.appendChild(s);
+        injectedDeployScript = true;
+      }
+      var int = setInterval(function () {
+        if (window.CodeMirror) {
+          clearInterval(int);
+          resolve(CodeMirror);
+        }
+      }, delay);
+    }
+  });
+
+  /** Load the CodeMirror sql code from a cdn.
+   *
+   * @returns {Promise} - resolves to the `CodeMirror` constructor.
+   */
+  var loadCodeMirrorSQL = (CodeMirror) =>
+    new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.setAttribute("type", "text/javascript");
+      s.setAttribute(
+        "src",
+        "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.58.1/mode/sql/sql.min.js"
+      );
+      document.body.appendChild(s);
+      resolve();
+    });
+
   // TODO
   /** Load
    *
-   * @returns {Promise} - resolves to the `GGBApplet` constructor.
+   * @returns {Promise} - resolves to a sqlite `worker`.
    */
   let initializeDbWorker = (setup_query) => {
-    console.log(setup_query);
     let dbWorker = worker();
     return execute(dbWorker, "PRAGMA foreign_keys = ON;") // Enable foreign keys constraint checking
       .then(() =>
@@ -109,7 +153,10 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
     return new Promise(function (resolve, reject) {
       let element = document.createElement("div");
       let textarea = document.createElement("textarea");
-      textarea.setAttribute("style", "display:block;min-width:600px");
+      textarea.setAttribute(
+        "style",
+        "display:block;min-width:600;"
+      );
       let button = document.createElement("button");
       button.innerHTML = "execute";
       button.setAttribute("class", "btn btn-primary");
@@ -119,9 +166,8 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       resetButton.innerHTML = "Reset DB";
       resetButton.setAttribute("class", "btn btn-primary");
 
-      button.addEventListener("click", (event) => {
-        event.preventDefault();
-        execute(state.student_worker, textarea.value).then((data) => {
+      function execEditorContents() {
+        execute(state.student_worker, editor.getValue()).then((data) => {
           let results = data.results;
           state.current_result = data;
           if (!results) {
@@ -135,6 +181,11 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
             }
           }
         });
+      }
+
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        execEditorContents();
       });
 
       resetButton.addEventListener("click", (event) => {
@@ -150,6 +201,21 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       element.appendChild(resetButton);
       element.appendChild(result);
       container.appendChild(element);
+
+      // Add syntax highlighting to the textarea
+      let editor = CodeMirror.fromTextArea(textarea, {
+        mode: "text/x-mysql",
+        viewportMargin: Infinity,
+        indentWithTabs: true,
+        smartIndent: true,
+        lineNumbers: true,
+        matchBrackets: true,
+        autofocus: true,
+        extraKeys: {
+          "Ctrl-Enter": execEditorContents,
+        },
+      });
+
       resolve(element);
     });
   };
@@ -175,6 +241,9 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
     this.correct_query = correct_query;
 
     promise = promise
+      .then(function () {
+        return loadCodeMirror.then(loadCodeMirrorSQL);
+      })
       .then(function () {
         return Promise.all([
           initializeDbWorker(setup_query).then((worker) =>
