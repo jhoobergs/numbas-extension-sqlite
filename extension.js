@@ -66,13 +66,16 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
    */
   let initializeDbWorker = (setup_query) => {
     let dbWorker = worker();
-    return execute(dbWorker, setup_query).then((result) => {
-      if (!result.error) {
-        return dbWorker;
-      } else {
-        throw "Failed initializing a database.";
-      }
-    });
+    return execute(dbWorker, "PRAGMA foreign_keys = ON;") // Enable foreign keys constraint checking
+      .then(() =>
+        execute(dbWorker, setup_query).then((result) => {
+          if (!result.error) {
+            return dbWorker;
+          } else {
+            throw "Failed initializing a database.";
+          }
+        })
+      );
   };
 
   // Create an HTML table
@@ -105,9 +108,12 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
     return new Promise(function (resolve, reject) {
       let element = document.createElement("div");
       let textarea = document.createElement("textarea");
+      textarea.setAttribute("style", "display:block;min-width:600px");
       let button = document.createElement("button");
       button.innerHTML = "execute";
+      button.setAttribute("class", "btn btn-primary");
       let result = document.createElement("div");
+      result.setAttribute("style", "margin-top:10px;");
       button.addEventListener("click", (event) => {
         event.preventDefault();
         execute(worker, textarea.value).then((data) => {
