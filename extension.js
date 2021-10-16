@@ -24,7 +24,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
 
   let TSQLEditor = function (data) {
     let a = this;
-    this.worker = null; // ??
+    this.student_worker = null; // ??
     this.el = null; // ??
     this.correct_result = null;
     this.current_result = null;
@@ -32,8 +32,8 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
     this.promise = data.promise; // ??
     this.container = data.element;
 
-    this.promise.then(function ([el, worker, correct_result]) {
-      a.worker = worker;
+    this.promise.then(function ([el, student_worker, correct_result]) {
+      a.student_worker = student_worker;
       a.element = el;
       a.correct_result = correct_result;
     });
@@ -65,6 +65,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
    * @returns {Promise} - resolves to the `GGBApplet` constructor.
    */
   let initializeDbWorker = (setup_query) => {
+    console.log(setup_query);
     let dbWorker = worker();
     return execute(dbWorker, "PRAGMA foreign_keys = ON;") // Enable foreign keys constraint checking
       .then(() =>
@@ -104,7 +105,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
    * @param {Object} options - options for `GGBApplet`.
    * @returns {Promise} - resolves to an object `{worker, el}` - `worker` is the student db worker object, `el` is the container element.
    */
-  var showEditor = function (worker, state) {
+  var showEditor = function (state) {
     return new Promise(function (resolve, reject) {
       let element = document.createElement("div");
       let textarea = document.createElement("textarea");
@@ -114,9 +115,13 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       button.setAttribute("class", "btn btn-primary");
       let result = document.createElement("div");
       result.setAttribute("style", "margin-top:10px;");
+      let resetButton = document.createElement("button");
+      resetButton.innerHTML = "Reset DB";
+      resetButton.setAttribute("class", "btn btn-primary");
+
       button.addEventListener("click", (event) => {
         event.preventDefault();
-        execute(worker, textarea.value).then((data) => {
+        execute(state.student_worker, textarea.value).then((data) => {
           let results = data.results;
           state.current_result = data;
           if (!results) {
@@ -131,8 +136,18 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
           }
         });
       });
+
+      resetButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        initializeDbWorker(state.setup_query).then((w) => {
+          state.student_worker = w;
+          result.innerHTML = "Database has been reset";
+        });
+      });
+
       element.appendChild(textarea);
       element.appendChild(button);
+      element.appendChild(resetButton);
       element.appendChild(result);
       container.appendChild(element);
       resolve(element);
@@ -170,7 +185,8 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       })
       .then(function ([correct_result, student_worker]) {
         sql_editor.correct_result = correct_result;
-        return showEditor(student_worker, sql_editor).then((el) => [
+        sql_editor.student_worker = student_worker;
+        return showEditor(sql_editor).then((el) => [
           el,
           student_worker,
           correct_result,
