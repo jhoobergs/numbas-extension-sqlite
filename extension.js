@@ -55,6 +55,10 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
   function execute(worker, commands) {
     return new Promise((resolve, reject) => {
       worker.onmessage = (event) => resolve(event.data);
+      worker.onerror = (event) => {
+        console.error(event);
+        reject(event);
+      };
       worker.postMessage({ action: "exec", sql: commands });
     });
   }
@@ -88,19 +92,24 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
     }
   });
 
+  let injectedSQLMode = false;
+
   /** Load the CodeMirror sql code from a cdn.
    *
    * @returns {Promise} - resolves to the `CodeMirror` constructor.
    */
   var loadCodeMirrorSQL = (CodeMirror) =>
     new Promise(function (resolve, reject) {
-      var s = document.createElement("script");
-      s.setAttribute("type", "text/javascript");
-      s.setAttribute(
-        "src",
-        "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.58.1/mode/sql/sql.min.js"
-      );
-      document.body.appendChild(s);
+      if (!injectedSQLMode) {
+        var s = document.createElement("script");
+        s.setAttribute("type", "text/javascript");
+        s.setAttribute(
+          "src",
+          "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.58.1/mode/sql/sql.min.js"
+        );
+        document.body.appendChild(s);
+        injectedSQLMode = true;
+      }
       resolve();
     });
 
@@ -117,6 +126,8 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
           if (!result.error) {
             return dbWorker;
           } else {
+            console.log("Failing for ", setup_query);
+            dbWorker.terminate();
             throw "Failed initializing a database.";
           }
         })
@@ -149,7 +160,8 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
    * @param {Object} options - options for `GGBApplet`.
    * @returns {Promise} - resolves to an object `{worker, el}` - `worker` is the student db worker object, `el` is the container element.
    */
-  var showEditor = function (state) {
+  let showEditor = function (state) {
+    console.log(state.correct_query);
     return new Promise(function (resolve, reject) {
       let element = document.createElement("div");
       let textarea = document.createElement("textarea");
@@ -167,7 +179,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       showTablesButton.innerHTML = "Show Tables";
       showTablesButton.setAttribute("class", "btn btn-primary");
 
-      function execEditorContents() {
+      let execEditorContents = () => {
         let command = editor.getValue();
         if (!command) {
           // If command is empty text
@@ -188,9 +200,9 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
             }
           }
         });
-      }
+      };
 
-      async function showTablesInfo(command) {
+      let showTablesInfo = async (command) => {
         let data = await execute(
           state.student_worker,
           "SELECT name FROM `sqlite_master` WHERE type='table';"
@@ -227,7 +239,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
             }
           }
         }
-      }
+      };
 
       button.addEventListener("click", (event) => {
         event.preventDefault();
@@ -236,6 +248,7 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
 
       resetButton.addEventListener("click", (event) => {
         event.preventDefault();
+        state.student_worker.terminate();
         initializeDbWorker(state.setup_query).then((w) => {
           state.student_worker = w;
           result.innerHTML = "Database has been reset";
@@ -267,7 +280,6 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
           "Ctrl-Enter": execEditorContents,
         },
       });
-
       resolve(element);
     });
   };
@@ -297,12 +309,16 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
         return loadCodeMirror.then(loadCodeMirrorSQL);
       })
       .then(function () {
-        return Promise.all([
-          initializeDbWorker(setup_query).then((worker) =>
-            execute(worker, correct_query)
-          ),
-          initializeDbWorker(setup_query),
-        ]);
+        // There are limits to the maximum amount of allowed web workers. So don't spawn to many at the same time
+        return initializeDbWorker(setup_query).then((worker) =>
+          execute(worker, correct_query).then((correct_result) => {
+            worker.terminate();
+            return initializeDbWorker(setup_query).then((student_worker) => [
+              correct_result,
+              student_worker,
+            ]);
+          })
+        );
       })
       .then(function ([correct_result, student_worker]) {
         sql_editor.correct_result = correct_result;
@@ -395,6 +411,9 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
       {
         evaluate: function (args, scope) {
           let sql_editor = args[0].value;
+
+          console.log(sql_editor.correct_result);
+          console.log(sql_editor.current_result);
 
           return new TBool(
             JSON.stringify(sql_editor.correct_result) ==
