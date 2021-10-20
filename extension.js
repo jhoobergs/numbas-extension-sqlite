@@ -44,15 +44,25 @@ Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
     },
   });
 
-  jme.display.registerType(
-        TSQLEditor,
-        {
-            tex: function(v) {
-                return '\\text{SQLite applet}';
-            },
-            jme: function(v) {
-		return `sqlite_editor(${v.value.setup_query}, ${v.value.correct_query})`
-                /*if(v.tok._to_jme) {
+  jme.display.registerType(TSQLEditor, {
+    tex: function (v) {
+      return "\\text{SQLite applet}";
+    },
+    jme: function (v) {
+      let data = v.tok.value;
+      let f = new jme.types.TFunc("sqlite_editor");
+      let tree = {
+        tok: f,
+        args: [
+          { tok: jme.wrapValue(data.setup_query) },
+          { tok: jme.wrapValue(data.correct_query) },
+        ],
+      };
+
+      let jme_s = jme.display.treeToJME(tree);
+      console.log(jme_s);
+      return jme_s;
+      /*if(v.tok._to_jme) {
                     throw(new Numbas.Error("A GeoGebra applet refers to itself in its own definition."));
                 }
                 v.tok._to_jme = true;
@@ -78,13 +88,12 @@ Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
                 };
                 var s = jme.display.treeToJME(tree);
                 v.tok._to_jme = false;
-                return s;*/
-            },
-            displayString: function(v) {
-                return 'SQLite applet';
-            }
-        }
-    );
+      return s; */
+    },
+    displayString: function (v) {
+      return "SQLite applet";
+    },
+  });
   let worker = () => {
     return new Worker(
       //"https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.6.1/worker.sql-wasm.js"
