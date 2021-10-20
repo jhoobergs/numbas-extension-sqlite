@@ -1,4 +1,4 @@
-Numbas.addExtension("sqlite", ["jme"], function (extension) {
+Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
   let scope = extension.scope;
 
   // write your extension code here
@@ -44,6 +44,47 @@ Numbas.addExtension("sqlite", ["jme"], function (extension) {
     },
   });
 
+  jme.display.registerType(
+        TSQLEditor,
+        {
+            tex: function(v) {
+                return '\\text{SQLite applet}';
+            },
+            jme: function(v) {
+		return `sqlite_editor(${v.value.setup_query}, ${v.value.correct_query})`
+                /*if(v.tok._to_jme) {
+                    throw(new Numbas.Error("A GeoGebra applet refers to itself in its own definition."));
+                }
+                v.tok._to_jme = true;
+                var data = v.tok.value.suspendData();
+                var options = jme.wrapValue(data.options);
+                var replacements = jme.wrapValue(data.replacements);
+                var parts = jme.wrapValue(data.parts);
+                var base64 = jme.wrapValue(data.base64);
+                var cache = {};
+                Object.keys(v.tok.cache).forEach(function(section) {
+                    cache[section] = new TDict(v.tok.cache[section]);
+                });
+                var f = new jme.types.TFunc('resume_geogebra_applet');
+                var tree = {
+                    tok: f,
+                    args: [
+                        {tok: options},
+                        {tok: replacements},
+                        {tok: parts},
+                        {tok: base64},
+                        {tok: new TDict(cache)}
+                    ]
+                };
+                var s = jme.display.treeToJME(tree);
+                v.tok._to_jme = false;
+                return s;*/
+            },
+            displayString: function(v) {
+                return 'SQLite applet';
+            }
+        }
+    );
   let worker = () => {
     return new Worker(
       //"https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.6.1/worker.sql-wasm.js"
