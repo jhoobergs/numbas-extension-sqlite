@@ -11,6 +11,7 @@ Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
   let funcObj = jme.funcObj;
   let TString = types.TString;
   let TBool = types.TBool;
+  let TList = types.TList;
   let THTML = types.THTML;
 
   // ?? What is this used for?
@@ -28,6 +29,7 @@ Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
     this.el = null; // ??
     this.correct_result = null;
     this.current_result = null;
+    this.show_expected_columns = null;
     this.value = data;
     this.promise = data.promise; // ??
     this.container = data.element;
@@ -56,11 +58,11 @@ Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
         args: [
           { tok: jme.wrapValue(data.setup_query) },
           { tok: jme.wrapValue(data.correct_query) },
+          { tok: jme.wrapValue(data.show_expected_columns) },
         ],
       };
 
       let jme_s = jme.display.treeToJME(tree);
-      console.log(jme_s);
       return jme_s;
       /*if(v.tok._to_jme) {
                     throw(new Numbas.Error("A GeoGebra applet refers to itself in its own definition."));
@@ -106,7 +108,6 @@ Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
     return new Promise((resolve, reject) => {
       worker.onmessage = (event) => resolve(event.data);
       worker.onerror = (event) => {
-        console.error(event);
         reject(event);
       };
       worker.postMessage({ action: "exec", sql: commands });
@@ -211,7 +212,6 @@ Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
    * @returns {Promise} - resolves to an object `{worker, el}` - `worker` is the student db worker object, `el` is the container element.
    */
   let showEditor = function (state) {
-    console.log(state.correct_query);
     return new Promise(function (resolve, reject) {
       let element = document.createElement("div");
       let textarea = document.createElement("textarea");
@@ -310,11 +310,22 @@ Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
         showTablesInfo();
       });
 
+      if (state.show_expected_columns) {
+        let div = document.createElement("div");
+        let span = document.createElement("span");
+        span.innerHTML = "Expected columns:";
+        let table = tableCreate(state.correct_result.results[0].columns, []);
+        table.setAttribute("style", "margin-left:0");
+        div.appendChild(span);
+        div.appendChild(table);
+        element.appendChild(div);
+      }
       element.appendChild(textarea);
       element.appendChild(button);
       element.appendChild(resetButton);
       element.appendChild(showTablesButton);
       element.appendChild(result);
+
       container.appendChild(element);
 
       // Add syntax highlighting to the textarea
@@ -334,7 +345,7 @@ Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
     });
   };
 
-  function SQLEditor(setup_query, correct_query) {
+  function SQLEditor(setup_query, correct_query, show_expected_columns) {
     let sql_editor = this;
     // create a container element, which we'll return
     // when the database has been loaded, we'll attach it to the container element ??
@@ -353,6 +364,7 @@ Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
 
     this.setup_query = setup_query;
     this.correct_query = correct_query;
+    this.show_expected_columns = show_expected_columns;
 
     promise = promise
       .then(function () {
@@ -431,22 +443,38 @@ Numbas.addExtension("sqlite", ["jme", "jme-display"], function (extension) {
    */
   createSQLEditor = extension.createSQLEditor = function (
     setup_query,
-    correct_query
+    correct_query,
+    show_expected_columns
   ) {
-    return new SQLEditor(setup_query, correct_query);
+    return new SQLEditor(setup_query, correct_query, show_expected_columns);
   };
+
+  let sig_sqlite_editor = sig.sequence(
+    sig.type("string"),
+    sig.type("string"),
+    sig.optional(sig.type("boolean"))
+  );
 
   extension.scope.addFunction(
     new funcObj(
       "sqlite_editor",
-      [TString, TString],
+      [sig_sqlite_editor],
       TSQLEditor,
       null, // ??
       {
         evaluate: function (args, scope) {
+          let match = sig_sqlite_editor(args);
           let setup_query = args[0].value;
           let correct_query = args[1].value;
-          return new TSQLEditor(createSQLEditor(setup_query, correct_query));
+          let show_expected_columns;
+          if (match[2].missing) {
+            show_expected_columns = false;
+          } else {
+            show_expected_columns = args[2].value;
+          }
+          return new TSQLEditor(
+            createSQLEditor(setup_query, correct_query, show_expected_columns)
+          );
         },
       },
       { unwrapValues: true }
